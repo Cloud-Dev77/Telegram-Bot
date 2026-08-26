@@ -1,0 +1,31 @@
+# Segredos — NUNCA versionar
+.env
+.env.*
+!.env.example
+credentials.json
+service-account*.json
+service-worker*.json
+*-key.json
+*.pem
+*.p12
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Ferramentas de desenvolvimento
+.ruff_cache/
+.pytest_cache/
+
+# Valores de deploy (contem segredos)
+deploy-valores.txt

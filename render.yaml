@@ -1,0 +1,39 @@
+# Configuracao para deploy no Render (https://render.com).
+#
+# Uso: crie um "Blueprint" apontando para este repositorio. O Render le este
+# arquivo e cria o servico com as configuracoes abaixo.
+#
+# Os valores marcados com `sync: false` NAO ficam no repositorio: o Render
+# pergunta cada um durante a criacao e guarda de forma cifrada.
+
+services:
+  - type: web
+    name: telegram-triagem-bot
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: BOT_TOKEN
+        sync: false
+      - key: MAIN_GROUP_ID
+        sync: false
+      - key: ADMIN_GROUP_ID
+        sync: false
+      - key: SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: WORKSHEET_NAME
+        value: "Solicitações Telegram"
+      - key: TIMEZONE
+        value: America/Sao_Paulo
+      - key: LOG_LEVEL
+        value: INFO
