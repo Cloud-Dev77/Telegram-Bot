@@ -24,7 +24,10 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Fuso horário usado em todas as datas gravadas na planilha.
-TIMEZONE = os.getenv("TIMEZONE", "America/Sao_Paulo")
+# `or` no fim: variável definida em branco também cai no padrão. Sem isso, um
+# TIMEZONE vazio derrubaria a data para UTC sem avisar, e toda a coluna de
+# data/hora da planilha sairia 3 horas adiantada.
+TIMEZONE = os.getenv("TIMEZONE", "").strip() or "America/Sao_Paulo"
 
 
 class ConfigError(RuntimeError):
@@ -32,7 +35,35 @@ class ConfigError(RuntimeError):
 
 
 def _get(name: str, default: str = "") -> str:
-    return os.getenv(name, default).strip()
+    """Valor da variável, tratando "definida porém vazia" como ausente.
+
+    `os.getenv(nome, padrao)` só devolve o padrão quando a variável não
+    existe. Painéis de hospedagem deixam criar variáveis em branco com
+    facilidade — e aí o padrão nunca entrava, o que já derrubou um deploy
+    com `int('')`. Aqui, vazio equivale a não definida.
+    """
+    return os.getenv(name, "").strip() or default
+
+
+def _get_int(name: str, default: int) -> int:
+    """Inteiro opcional. Valor inválido vira aviso, não queda do serviço.
+
+    Vale para ajustes acessórios como a porta: derrubar o bot inteiro por
+    causa de um número mal digitado seria pior do que seguir com o padrão.
+    """
+    bruto = _get(name)
+    if not bruto:
+        return default
+    try:
+        return int(bruto)
+    except ValueError:
+        logger.warning(
+            "%s=%r não é um número inteiro. Usando o padrão %d.",
+            name,
+            bruto,
+            default,
+        )
+        return default
 
 
 def _require(name: str, dica: str = "") -> str:
@@ -169,7 +200,7 @@ def load_config() -> Config:
         google_credentials=_carregar_credenciais_google(),
         webhook_url=_resolver_webhook_url(),
         webhook_secret=_get("WEBHOOK_SECRET"),
-        port=int(_get("PORT", "8080")),
+        port=_get_int("PORT", 8080),
         log_level=_get("LOG_LEVEL", "INFO").upper(),
     )
 

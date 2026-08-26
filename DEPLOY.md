@@ -110,9 +110,18 @@ Abra **`deploy-valores.txt`** e cadastre cada uma no painel
 | `TIMEZONE` | `America/Sao_Paulo` |
 | `LOG_LEVEL` | `INFO` |
 
+São 9 variáveis. `PYTHON_VERSION` não entra na lista — vem do arquivo
+`.python-version`.
+
 **Não cadastre `WEBHOOK_URL` nem `PORT`.** O Render define `RENDER_EXTERNAL_URL`
 e `PORT` sozinho, e o bot já lê esses valores — foi assim que ele decide entrar
-em modo webhook.
+em modo webhook. Criar essas variáveis em branco não quebra mais nada (o bot
+trata vazio como não definido), mas continua sendo ruído desnecessário.
+
+Também não é preciso cadastrar `PYTHON_VERSION`: o arquivo `.python-version`
+no repositório já fixa a versão, e o Render o lê sozinho. Sem ele, o Render
+usa a versão mais nova que tiver — que pode ser mais recente do que as
+bibliotecas suportam.
 
 > ⚠️ O `GOOGLE_CREDENTIALS_JSON` é longo (mais de 2000 caracteres) e precisa
 > ficar em **uma linha só**. Copie do `deploy-valores.txt` de uma vez. Se o
@@ -238,6 +247,10 @@ administradores e revogue os antigos.
 O bot estava dormindo e a janela de ~5 minutos do Telegram expirou. Nada se
 perde: peça à pessoa para abrir o bot e tocar em **INICIAR**. Para não voltar
 a acontecer, confira o monitor do Passo 6.
+
+**`ValueError: invalid literal for int()` na subida**
+Versão antiga do código. Uma variável numérica foi criada em branco no
+painel e o padrão não era aplicado. Corrigido — atualize o repositório.
 
 **`last_error_message` no diagnóstico**
 Serviço dormindo, URL errada ou `WEBHOOK_SECRET` diferente do que o Telegram
