@@ -62,9 +62,9 @@ class BaseFluxo(unittest.IsolatedAsyncioTestCase):
         await self.criar_solicitacao()
         await self.escolher_categoria(0)
         await self.responder("Maria Aparecida de Souza")
-        await self.responder("SP, Campinas")
-        await self.responder("Hospital Municipal")
-        await self.responder("CRM-SP 123456")
+        await self.responder("Campinas/SP")
+        await self.responder("1º Cartório de Notas")
+        await self.responder("123456-7")
 
 
 class TestColetaDeDados(BaseFluxo):
@@ -94,12 +94,12 @@ class TestColetaDeDados(BaseFluxo):
     async def test_grava_cada_resposta_na_planilha_na_hora(self):
         await self.criar_solicitacao()
         await self.escolher_categoria(0)
-        self.assertEqual(self.planilha.celula(2, "E"), "Membro Efetivo")
+        self.assertEqual(self.planilha.celula(2, "E"), "Sim")
         await self.responder("Maria Aparecida de Souza")
         self.assertEqual(self.planilha.celula(2, "F"), "Maria Aparecida de Souza")
-        await self.responder("SP, Campinas")
-        self.assertEqual(self.planilha.celula(2, "G"), "SP")
-        self.assertEqual(self.planilha.celula(2, "H"), "Campinas")
+        await self.responder("Campinas/SP")
+        self.assertEqual(self.planilha.celula(2, "G"), "Campinas")
+        self.assertEqual(self.planilha.celula(2, "H"), "SP")
 
     async def test_botao_de_categoria_antigo_nao_sobrescreve(self):
         """Clicar de novo no botão da pergunta 1 não pode voltar o fluxo."""
@@ -110,7 +110,7 @@ class TestColetaDeDados(BaseFluxo):
         query = await self.escolher_categoria(1)  # clique tardio em outra opção
         solicitacao = self.store.obter(USER_ID)
         self.assertEqual(solicitacao.etapa, 2)
-        self.assertEqual(solicitacao.categoria, "Membro Efetivo")
+        self.assertEqual(solicitacao.titular, "Sim")
         query.answer.assert_awaited()
 
 
@@ -184,7 +184,7 @@ class TestCardAdministrativo(BaseFluxo):
         cards = mensagens_para(self.context.bot, self.config.admin_group_id)
         self.assertEqual(len(cards), 1)
         self.assertIn("Maria Aparecida de Souza", cards[0])
-        self.assertIn("CRM-SP 123456", cards[0])
+        self.assertIn("123456-7", cards[0])
         self.assertIn("Campinas", cards[0])
 
         solicitacao = self.store.obter(USER_ID)
@@ -197,16 +197,68 @@ class TestCardAdministrativo(BaseFluxo):
         await self.criar_solicitacao()
         await self.escolher_categoria(0)
         await self.responder("Maria Aparecida de Souza")
-        await self.responder("SP, Campinas")
-        await self.responder("Unidade <b>falsa</b> & cia")
-        await self.responder("CRM-SP 123456")
+        await self.responder("Campinas/SP")
+        await self.responder("Cartório <b>falso</b> & cia")
+        await self.responder("123456-7")
 
         query = query_falsa("conf:sim", chat_id=USER_ID)
         await onboarding.on_confirmacao(
             update_falso(query, self.usuario, USER_ID), self.context
         )
         card = mensagens_para(self.context.bot, self.config.admin_group_id)[0]
-        self.assertIn("&lt;b&gt;falsa&lt;/b&gt; &amp; cia", card)
+        self.assertIn("&lt;b&gt;falso&lt;/b&gt; &amp; cia", card)
+
+
+class TestElegibilidade(BaseFluxo):
+    """A pergunta 1 é critério de entrada, não classificação.
+
+    Quem responde "Não" declara não ser titular de Serventia Extrajudicial —
+    justamente o público do grupo. O cadastro continua (quem decide são os
+    administradores), mas o card precisa gritar, para ninguém aprovar no
+    automático.
+    """
+
+    async def preencher_com(self, indice_opcao):
+        await self.criar_solicitacao()
+        await self.escolher_categoria(indice_opcao)
+        await self.responder("Maria Aparecida de Souza")
+        await self.responder("Campinas/SP")
+        await self.responder("1º Cartório de Notas")
+        await self.responder("123456-7")
+        await onboarding.on_confirmacao(
+            update_falso(query_falsa("conf:sim", chat_id=USER_ID), self.usuario, USER_ID),
+            self.context,
+        )
+        return mensagens_para(self.context.bot, self.config.admin_group_id)[0]
+
+    async def test_sim_nao_gera_alerta(self):
+        card = await self.preencher_com(0)  # Sim
+        self.assertIn("Titular de Serventia:</b> Sim", card)
+        self.assertNotIn("ATENÇÃO", card)
+        self.assertTrue(self.store.obter(USER_ID).elegivel)
+
+    async def test_nao_gera_alerta_destacado_no_card(self):
+        card = await self.preencher_com(1)  # Não
+        self.assertIn("ATENÇÃO", card)
+        self.assertIn("NÃO</b> ser titular", card)
+        self.assertFalse(self.store.obter(USER_ID).elegivel)
+
+    async def test_nao_continua_o_cadastro_normalmente(self):
+        """Responder 'Não' não interrompe nada — a decisão é dos admins."""
+        await self.preencher_com(1)
+        solicitacao = self.store.obter(USER_ID)
+        self.assertEqual(solicitacao.status, STATUS_AGUARDANDO)
+        self.assertEqual(solicitacao.titular, "Não")
+        self.assertEqual(solicitacao.cns, "123456-7")
+
+    async def test_planilha_espelha_as_colunas_do_formulario(self):
+        await self.preencher_com(0)
+        self.assertEqual(self.planilha.celula(2, "E"), "Sim")
+        self.assertEqual(self.planilha.celula(2, "F"), "Maria Aparecida de Souza")
+        self.assertEqual(self.planilha.celula(2, "G"), "Campinas")
+        self.assertEqual(self.planilha.celula(2, "H"), "SP")
+        self.assertEqual(self.planilha.celula(2, "I"), "1º Cartório de Notas")
+        self.assertEqual(self.planilha.celula(2, "J"), "123456-7")
 
 
 class TestDecisao(BaseFluxo):

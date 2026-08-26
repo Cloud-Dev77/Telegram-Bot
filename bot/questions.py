@@ -4,10 +4,16 @@
 ESTE É O SEGUNDO ARQUIVO PENSADO PARA PERSONALIZAÇÃO.
 =============================================================================
 
+As perguntas reproduzem o formulário "Cadastro - Grupo Titulares Telegram":
+
+    1. Você é titular de Serventia Extrajudicial?  (Sim / Não)
+    2. Qual o seu nome completo?
+    3. Qual seu Município/UF?
+    4. Nome da Serventia
+    5. CNS do Cartório
+
 Para trocar o texto de uma pergunta, edite o campo `pergunta` da entrada
 correspondente em `PERGUNTAS`, no fim do arquivo.
-
-Para trocar as opções de categoria, edite a lista `CATEGORIAS`.
 
 A validação existe para que nenhuma linha da planilha chegue incompleta ou com
 lixo aos administradores: cada resposta é conferida antes de o candidato
@@ -21,14 +27,15 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 # ---------------------------------------------------------------------------
-# Opções da pergunta 1 (botões). Edite à vontade — a ordem é a que aparece.
+# Opções da pergunta 1 (botões). A ordem é a que aparece na conversa.
 # ---------------------------------------------------------------------------
 
-CATEGORIAS: list[str] = [
-    "Membro Efetivo",
-    "Associado",
-    "Outros",
-]
+OPCOES_TITULAR: list[str] = ["Sim", "Não"]
+
+# Resposta que indica que a pessoa NÃO atende ao critério do grupo. O cadastro
+# continua mesmo assim — quem decide são os administradores —, mas o card de
+# verificação recebe um destaque para que ninguém aprove por distração.
+RESPOSTA_NAO_ELEGIVEL = "Não"
 
 # Unidades da federação válidas, usadas para validar a pergunta 3.
 UFS: frozenset[str] = frozenset(
@@ -42,7 +49,7 @@ class Resultado:
     """Resultado de uma validação.
 
     `valores` mapeia nome do campo -> valor já limpo e pronto para a planilha.
-    Uma pergunta pode preencher mais de um campo (é o caso de UF + Município).
+    Uma pergunta pode preencher mais de um campo (é o caso de Município + UF).
     """
 
     ok: bool
@@ -75,15 +82,15 @@ def _titulo(texto: str) -> str:
 _RE_NOME = re.compile(r"^[A-Za-zÀ-ɏ'’\-\s\.]+$")
 
 
-def validar_categoria(texto: str) -> Resultado:
+def validar_titular(texto: str) -> Resultado:
     """Aceita o texto exato de um dos botões (ou o mesmo texto digitado)."""
     limpo = _normalizar_espacos(texto)
-    for opcao in CATEGORIAS:
+    for opcao in OPCOES_TITULAR:
         if limpo.casefold() == opcao.casefold():
-            return Resultado(True, {"categoria": opcao})
-    opcoes = " • ".join(CATEGORIAS)
+            return Resultado(True, {"titular": opcao})
     return Resultado(
-        False, erro=f"Escolha uma das opções usando os botões acima: {opcoes}."
+        False,
+        erro="Responda usando os botões acima: <b>Sim</b> ou <b>Não</b>.",
     )
 
 
@@ -108,35 +115,39 @@ def validar_nome_completo(texto: str) -> Resultado:
     return Resultado(True, {"nome_completo": _titulo(limpo)})
 
 
-def validar_uf_municipio(texto: str) -> Resultado:
-    """Aceita 'SP, Campinas', 'SP - Campinas', 'SP/Campinas', 'Campinas SP'..."""
+def validar_municipio_uf(texto: str) -> Resultado:
+    """Aceita 'Campinas/SP', 'Campinas - SP', 'SP, Campinas'...
+
+    O formulário pede "Município/UF", mas a ordem inversa é comum na prática.
+    Como a UF é reconhecida pela sigla, as duas formas funcionam.
+    """
     limpo = _normalizar_espacos(texto)
     partes = re.split(r"\s*[,;/|\-–—]\s*", limpo, maxsplit=1)
 
     if len(partes) == 1:
         # Sem separador: tenta identificar a UF no início ou no fim.
         tokens = limpo.split()
-        if len(tokens) >= 2 and tokens[0].upper() in UFS:
-            partes = [tokens[0], " ".join(tokens[1:])]
-        elif len(tokens) >= 2 and tokens[-1].upper() in UFS:
-            partes = [tokens[-1], " ".join(tokens[:-1])]
+        if len(tokens) >= 2 and tokens[-1].upper() in UFS:
+            partes = [" ".join(tokens[:-1]), tokens[-1]]
+        elif len(tokens) >= 2 and tokens[0].upper() in UFS:
+            partes = [" ".join(tokens[1:]), tokens[0]]
         else:
             return Resultado(
                 False,
                 erro="Não consegui identificar o estado. Responda no formato "
-                "<b>UF, Município</b> — por exemplo: <code>SP, Campinas</code>.",
+                "<b>Município/UF</b> — por exemplo: <code>Campinas/SP</code>.",
             )
 
     a, b = partes[0].strip(), partes[1].strip()
-    if a.upper() in UFS:
-        uf, municipio = a.upper(), b
-    elif b.upper() in UFS:
-        uf, municipio = b.upper(), a
+    if b.upper() in UFS:
+        municipio, uf = a, b.upper()
+    elif a.upper() in UFS:
+        municipio, uf = b, a.upper()
     else:
         return Resultado(
             False,
-            erro=f"<b>{a[:20]}</b> não é uma sigla de estado válida. Use a sigla "
-            "de 2 letras — por exemplo: <code>MG, Belo Horizonte</code>.",
+            erro="Não encontrei uma sigla de estado válida. Use a sigla de 2 "
+            "letras — por exemplo: <code>Belo Horizonte/MG</code>.",
         )
 
     if len(municipio) < 3:
@@ -147,30 +158,53 @@ def validar_uf_municipio(texto: str) -> Resultado:
         return Resultado(
             False, erro="O município deve conter apenas letras e espaços."
         )
-    return Resultado(True, {"uf": uf, "municipio": _titulo(municipio)})
+    return Resultado(True, {"municipio": _titulo(municipio), "uf": uf})
 
 
-def validar_unidade(texto: str) -> Resultado:
+def validar_serventia(texto: str) -> Resultado:
     limpo = _normalizar_espacos(texto)
-    if len(limpo) < 2:
-        return Resultado(False, erro="A resposta é curta demais.")
-    if len(limpo) > 120:
+    if len(limpo) < 3:
         return Resultado(
-            False, erro="A resposta é longa demais (máximo 120 caracteres)."
+            False, erro="O nome da serventia parece curto demais."
         )
-    return Resultado(True, {"unidade": limpo})
+    if len(limpo) > 150:
+        return Resultado(
+            False, erro="A resposta é longa demais (máximo 150 caracteres)."
+        )
+    return Resultado(True, {"serventia": limpo})
 
 
-def validar_registro(texto: str) -> Resultado:
+def validar_cns(texto: str) -> Resultado:
+    """CNS — Código Nacional da Serventia.
+
+    A validação é deliberadamente tolerante quanto à pontuação: aceita
+    `123456-7`, `12.3456-7` ou `1234567`, conferindo apenas a quantidade de
+    dígitos. Recusar um CNS válido por causa do formato deixaria a pessoa
+    presa no meio do cadastro, enquanto um código estranho apenas chega ao
+    card e o administrador avalia.
+    """
     limpo = _normalizar_espacos(texto)
-    if not 3 <= len(limpo) <= 40:
-        return Resultado(False, erro="O código deve ter entre 3 e 40 caracteres.")
-    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9\s\.\-/]*$", limpo):
+    if not limpo:
+        return Resultado(False, erro="Informe o CNS do cartório.")
+
+    if not re.fullmatch(r"[0-9][0-9\.\-/\s]*", limpo):
         return Resultado(
             False,
-            erro="Use apenas letras, números e os sinais <code>. - /</code>.",
+            erro="O CNS é numérico. Use apenas números e, se quiser, "
+            "os separadores <code>. -</code> — por exemplo: <code>123456-7</code>.",
         )
-    return Resultado(True, {"registro": limpo.upper()})
+
+    digitos = re.sub(r"\D", "", limpo)
+    if len(digitos) < 6:
+        return Resultado(
+            False,
+            erro=f"O CNS informado tem só {len(digitos)} dígitos. "
+            "O código costuma ter 6 dígitos mais o dígito verificador.",
+        )
+    if len(digitos) > 12:
+        return Resultado(False, erro="O CNS informado tem dígitos demais.")
+
+    return Resultado(True, {"cns": limpo})
 
 
 # ---------------------------------------------------------------------------
@@ -189,50 +223,49 @@ class Pergunta:
 
 PERGUNTAS: tuple[Pergunta, ...] = (
     Pergunta(
-        chave="categoria",
+        chave="titular",
         pergunta=(
             "<b>Pergunta 1 de 5</b>\n\n"
-            "Qual é o seu perfil na comunidade?\n\n"
+            "Você é titular de Serventia Extrajudicial?\n\n"
             "<i>Toque em uma das opções abaixo.</i>"
         ),
-        validar=validar_categoria,
-        opcoes=tuple(CATEGORIAS),
+        validar=validar_titular,
+        opcoes=tuple(OPCOES_TITULAR),
     ),
     Pergunta(
         chave="nome_completo",
         pergunta=(
             "<b>Pergunta 2 de 5</b>\n\n"
-            "Qual é o seu <b>nome completo</b>?\n\n"
+            "Qual o seu <b>nome completo</b>?\n\n"
             "<i>Exemplo: Maria Aparecida de Souza</i>"
         ),
         validar=validar_nome_completo,
     ),
     Pergunta(
-        chave="uf_municipio",
+        chave="municipio_uf",
         pergunta=(
             "<b>Pergunta 3 de 5</b>\n\n"
-            "Em qual <b>estado e município</b> você atua?\n\n"
-            "<i>Responda no formato UF, Município — exemplo: SP, Campinas</i>"
+            "Qual seu <b>Município/UF</b>?\n\n"
+            "<i>Exemplo: Campinas/SP</i>"
         ),
-        validar=validar_uf_municipio,
+        validar=validar_municipio_uf,
     ),
     Pergunta(
-        chave="unidade",
+        chave="serventia",
         pergunta=(
             "<b>Pergunta 4 de 5</b>\n\n"
-            "Qual é o nome da sua <b>unidade, empresa ou entidade</b>?\n\n"
-            "<i>Se não houver, responda: Não se aplica</i>"
+            "Qual o <b>nome da Serventia</b>?"
         ),
-        validar=validar_unidade,
+        validar=validar_serventia,
     ),
     Pergunta(
-        chave="registro",
+        chave="cns",
         pergunta=(
             "<b>Pergunta 5 de 5</b>\n\n"
-            "Informe o seu <b>código de registro profissional ou de cadastro</b>.\n\n"
-            "<i>Última pergunta!</i>"
+            "Informe o <b>CNS do Cartório</b>.\n\n"
+            "<i>Código Nacional da Serventia — última pergunta!</i>"
         ),
-        validar=validar_registro,
+        validar=validar_cns,
     ),
 )
 

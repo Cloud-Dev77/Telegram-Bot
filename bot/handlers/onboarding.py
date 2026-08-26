@@ -30,7 +30,7 @@ from ..models import (
     STATUS_RECUSADO,
     Solicitacao,
 )
-from ..questions import CATEGORIAS, PERGUNTAS, TOTAL_PERGUNTAS
+from ..questions import OPCOES_TITULAR, PERGUNTAS, TOTAL_PERGUNTAS
 from ..utils import h, nome_exibicao
 from .common import (
     avancar,
@@ -250,14 +250,14 @@ async def on_nao_texto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def on_categoria(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Clique em um dos botões da pergunta 1."""
+    """Clique em um dos botões da pergunta 1 (titular de serventia?)."""
     query = update.callback_query
     usuario = update.effective_user
     store = get_store(context)
 
     try:
         indice = int(query.data.split(":", 1)[1])
-        opcao = CATEGORIAS[indice]
+        opcao = OPCOES_TITULAR[indice]
     except (IndexError, ValueError):
         await query.answer("Opção inválida.", show_alert=True)
         return
@@ -285,7 +285,7 @@ async def on_categoria(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         except BadRequest:
             pass
 
-        await store.salvar_resposta(solicitacao, {"categoria": opcao}, 1)
+        await store.salvar_resposta(solicitacao, {"titular": opcao}, 1)
         await avancar(context.bot, usuario.id, solicitacao)
 
 
@@ -337,12 +337,13 @@ async def _publicar_card(
     store = get_store(context)
 
     texto = texts.CARD_ADMIN.format(
-        categoria=h(solicitacao.categoria),
+        alerta="" if solicitacao.elegivel else texts.ALERTA_NAO_ELEGIVEL,
+        titular=h(solicitacao.titular),
         nome_completo=h(solicitacao.nome_completo),
         municipio=h(solicitacao.municipio),
         uf=h(solicitacao.uf),
-        unidade=h(solicitacao.unidade),
-        registro=h(solicitacao.registro),
+        serventia=h(solicitacao.serventia),
+        cns=h(solicitacao.cns),
         user_id=solicitacao.user_id,
         username=h(solicitacao.username_exibicao),
         nome_telegram=h(solicitacao.nome_telegram),

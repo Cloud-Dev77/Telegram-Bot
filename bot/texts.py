@@ -124,18 +124,26 @@ ERRO_GENERICO = (
 # ---------------------------------------------------------------------------
 
 CARD_ADMIN = (
-    "🆕 <b>Nova solicitação de entrada</b>\n\n"
-    "🏷 <b>Categoria:</b> {categoria}\n"
+    "🆕 <b>Nova solicitação de entrada</b>{alerta}\n\n"
+    "📋 <b>Titular de Serventia:</b> {titular}\n"
     "👤 <b>Nome completo:</b> {nome_completo}\n"
-    "📍 <b>Local:</b> {municipio} / {uf}\n"
-    "🏢 <b>Unidade / Empresa:</b> {unidade}\n"
-    "🪪 <b>Registro:</b> <code>{registro}</code>\n\n"
+    "📍 <b>Município/UF:</b> {municipio}/{uf}\n"
+    "🏛 <b>Serventia:</b> {serventia}\n"
+    "🪪 <b>CNS do Cartório:</b> <code>{cns}</code>\n\n"
     "───────────────\n"
     "🆔 <b>Telegram ID:</b> <code>{user_id}</code>\n"
     "🔗 <b>Usuário:</b> {username}\n"
     "📛 <b>Nome no Telegram:</b> {nome_telegram}\n"
     "🕒 <b>Solicitado em:</b> {data_hora}\n"
     "📄 <b>Linha na planilha:</b> {linha}"
+)
+
+# Inserido no topo do card quando a pessoa declara NÃO ser titular. Não
+# bloqueia a aprovação — quem decide são os administradores —, mas evita que
+# alguém aprove no automático sem reparar.
+ALERTA_NAO_ELEGIVEL = (
+    "\n\n⚠️ <b>ATENÇÃO:</b> esta pessoa declarou <b>NÃO</b> ser titular de "
+    "Serventia Extrajudicial."
 )
 
 BOTAO_APROVAR = "✅ Aprovar"

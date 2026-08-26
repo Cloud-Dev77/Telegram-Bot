@@ -245,7 +245,7 @@ testar. Peça entrada no grupo com uma segunda conta e acompanhe o fluxo.
 python -m unittest discover -s tests -t .
 ```
 
-55 testes cobrem as validações, o fluxo completo, a retomada após reinício da
+109 testes cobrem as validações, o fluxo completo, a retomada após reinício da
 hospedagem, o clique duplo nos botões administrativos e as solicitações que
 deixam de existir no Telegram. Nenhum deles usa rede.
 
@@ -325,12 +325,26 @@ erro. Regras ao editar:
 
 ### `bot/questions.py` — as 5 perguntas
 
+As 5 perguntas reproduzem o formulário do cliente:
+
+1. Você é titular de Serventia Extrajudicial? (Sim / Não)
+2. Qual o seu nome completo?
+3. Qual seu Município/UF?
+4. Nome da Serventia
+5. CNS do Cartório
+
 * Para mudar o texto de uma pergunta, edite o campo `pergunta` da entrada
   correspondente na lista `PERGUNTAS`, no fim do arquivo.
-* Para mudar as opções do primeiro botão, edite a lista `CATEGORIAS` no começo
+* Para mudar as opções do primeiro botão, edite `OPCOES_TITULAR` no começo
   do arquivo.
 * Cada pergunta tem um validador. Para aceitar qualquer texto em uma delas,
-  troque o validador por `validar_unidade`, que só confere o tamanho.
+  troque o validador por `validar_serventia`, que só confere o tamanho.
+
+**A pergunta 1 é critério de entrada, não classificação.** Quem responde
+"Não" declara não ser titular de serventia — o público do grupo. O cadastro
+continua normalmente, porque quem decide são os administradores, mas o card
+de verificação recebe um aviso destacado para que ninguém aprove por
+distração. Esse comportamento fica em `RESPOSTA_NAO_ELEGIVEL`.
 
 Depois de editar, rode os testes (`python -m unittest discover -s tests -t .`) e
 reinicie o bot.
@@ -341,18 +355,20 @@ reinicie o bot.
 
 O bot cria a aba **`Solicitações Telegram`** com estas colunas:
 
-| Coluna | Conteúdo |
-|---|---|
-| A | Data/Hora da solicitação |
-| B | Telegram ID |
-| C | @username |
-| D | Nome no Telegram |
-| E | Categoria |
-| F | Nome Completo |
-| G | UF |
-| H | Município |
-| I | Unidade / Empresa / Entidade |
-| J | Código de Registro |
+As colunas espelham o formulário **"Cadastro - Grupo Titulares Telegram"**:
+
+| Coluna | Conteúdo | Pergunta no formulário |
+|---|---|---|
+| A | Data/Hora da solicitação | — |
+| B | Telegram ID | — |
+| C | @username | — |
+| D | Nome no Telegram | — |
+| E | Titular de Serventia? | 1 (Sim/Não) |
+| F | Nome Completo | 2 |
+| G | Município | 3 |
+| H | UF | 3 |
+| I | Nome da Serventia | 4 |
+| J | CNS do Cartório | 5 |
 | K | **Status** |
 | L | Data/Hora da Decisão |
 | M | Decidido por |
@@ -460,7 +476,7 @@ quem já decidiu e quando.
 ├── tools/
 │   └── diagnostico.py         Verificação da instalação
 │
-└── tests/                     55 testes, sem rede
+└── tests/                    109 testes, sem rede
 ```
 
 ### Comandos do bot

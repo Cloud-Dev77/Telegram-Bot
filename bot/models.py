@@ -33,12 +33,12 @@ CABECALHO: tuple[str, ...] = (
     "Telegram ID",                    # B
     "Username",                       # C
     "Nome no Telegram",               # D
-    "Categoria",                      # E
+    "Titular de Serventia?",          # E
     "Nome Completo",                  # F
-    "UF",                             # G
-    "Município",                      # H
-    "Unidade / Empresa / Entidade",   # I
-    "Código de Registro",             # J
+    "Município",                      # G
+    "UF",                             # H
+    "Nome da Serventia",              # I
+    "CNS do Cartório",                # J
     "Status",                         # K
     "Data/Hora da Decisão",           # L
     "Decidido por",                   # M
@@ -54,12 +54,12 @@ COL_DATA_HORA = 0
 COL_USER_ID = 1
 COL_USERNAME = 2
 COL_NOME_TELEGRAM = 3
-COL_CATEGORIA = 4
+COL_TITULAR = 4
 COL_NOME_COMPLETO = 5
-COL_UF = 6
-COL_MUNICIPIO = 7
-COL_UNIDADE = 8
-COL_REGISTRO = 9
+COL_MUNICIPIO = 6
+COL_UF = 7
+COL_SERVENTIA = 8
+COL_CNS = 9
 COL_STATUS = 10
 COL_DECIDIDO_EM = 11
 COL_DECIDIDO_POR = 12
@@ -68,12 +68,12 @@ COL_MSG_ADMIN = 14
 
 # Colunas escritas conforme o candidato responde (chave -> letra da coluna).
 COLUNA_POR_CAMPO: dict[str, str] = {
-    "categoria": "E",
+    "titular": "E",
     "nome_completo": "F",
-    "uf": "G",
-    "municipio": "H",
-    "unidade": "I",
-    "registro": "J",
+    "municipio": "G",
+    "uf": "H",
+    "serventia": "I",
+    "cns": "J",
 }
 
 
@@ -88,12 +88,12 @@ class Solicitacao:
     nome_telegram: str = ""
 
     # Respostas das 5 perguntas
-    categoria: str = ""
+    titular: str = ""
     nome_completo: str = ""
-    uf: str = ""
     municipio: str = ""
-    unidade: str = ""
-    registro: str = ""
+    uf: str = ""
+    serventia: str = ""
+    cns: str = ""
 
     # Controle
     status: str = STATUS_EM_ANDAMENTO
@@ -116,6 +116,17 @@ class Solicitacao:
         return self.status in STATUS_FINAIS
 
     @property
+    def elegivel(self) -> bool:
+        """False quando a pessoa declarou NÃO ser titular de serventia.
+
+        Não bloqueia nada — quem decide são os administradores. Serve para
+        destacar o caso no card, de modo que ninguém aprove por distração.
+        """
+        from .questions import RESPOSTA_NAO_ELEGIVEL
+
+        return self.titular.casefold() != RESPOSTA_NAO_ELEGIVEL.casefold()
+
+    @property
     def username_exibicao(self) -> str:
         return f"@{self.username}" if self.username else "(sem @usuário)"
 
@@ -128,12 +139,12 @@ class Solicitacao:
             str(self.user_id),
             self.username,
             self.nome_telegram,
-            self.categoria,
+            self.titular,
             self.nome_completo,
-            self.uf,
             self.municipio,
-            self.unidade,
-            self.registro,
+            self.uf,
+            self.serventia,
+            self.cns,
             self.status,
             self.decidido_em,
             self.decidido_por,
@@ -166,12 +177,12 @@ class Solicitacao:
             data_hora=celulas[COL_DATA_HORA].strip(),
             username=celulas[COL_USERNAME].strip().lstrip("@"),
             nome_telegram=celulas[COL_NOME_TELEGRAM].strip(),
-            categoria=celulas[COL_CATEGORIA].strip(),
+            titular=celulas[COL_TITULAR].strip(),
             nome_completo=celulas[COL_NOME_COMPLETO].strip(),
-            uf=celulas[COL_UF].strip(),
             municipio=celulas[COL_MUNICIPIO].strip(),
-            unidade=celulas[COL_UNIDADE].strip(),
-            registro=celulas[COL_REGISTRO].strip(),
+            uf=celulas[COL_UF].strip(),
+            serventia=celulas[COL_SERVENTIA].strip(),
+            cns=celulas[COL_CNS].strip(),
             status=celulas[COL_STATUS].strip() or STATUS_EM_ANDAMENTO,
             decidido_em=celulas[COL_DECIDIDO_EM].strip(),
             decidido_por=celulas[COL_DECIDIDO_POR].strip(),
@@ -184,9 +195,9 @@ class Solicitacao:
         from html import escape
 
         return (
-            f"🏷 <b>Categoria:</b> {escape(self.categoria)}\n"
+            f"📋 <b>Titular de Serventia:</b> {escape(self.titular)}\n"
             f"👤 <b>Nome:</b> {escape(self.nome_completo)}\n"
-            f"📍 <b>Local:</b> {escape(self.municipio)} / {escape(self.uf)}\n"
-            f"🏢 <b>Unidade:</b> {escape(self.unidade)}\n"
-            f"🪪 <b>Registro:</b> {escape(self.registro)}"
+            f"📍 <b>Município/UF:</b> {escape(self.municipio)}/{escape(self.uf)}\n"
+            f"🏛 <b>Serventia:</b> {escape(self.serventia)}\n"
+            f"🪪 <b>CNS:</b> {escape(self.cns)}"
         )
