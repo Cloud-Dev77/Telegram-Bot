@@ -72,6 +72,24 @@ class TestVariavelEmBranco(unittest.TestCase):
             self.assertEqual(config.worksheet_name, "Solicitações Telegram")
 
 
+class TestAutoPing(unittest.TestCase):
+    def test_padrao_e_10_minutos(self):
+        with ambiente():
+            self.assertEqual(cfg.load_config().keepalive_minutos, 10)
+
+    def test_zero_desliga(self):
+        with ambiente(KEEPALIVE_MINUTES="0"):
+            self.assertEqual(cfg.load_config().keepalive_minutos, 0)
+
+    def test_valor_personalizado(self):
+        with ambiente(KEEPALIVE_MINUTES="5"):
+            self.assertEqual(cfg.load_config().keepalive_minutos, 5)
+
+    def test_em_branco_usa_o_padrao(self):
+        with ambiente(KEEPALIVE_MINUTES=""):
+            self.assertEqual(cfg.load_config().keepalive_minutos, 10)
+
+
 class TestModoDeExecucao(unittest.TestCase):
     def test_sem_url_publica_fica_em_polling(self):
         with ambiente():

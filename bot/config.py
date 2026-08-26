@@ -113,6 +113,7 @@ class Config:
     webhook_secret: str
     port: int
     log_level: str
+    keepalive_minutos: int
 
     @property
     def modo_webhook(self) -> bool:
@@ -202,6 +203,7 @@ def load_config() -> Config:
         webhook_secret=_get("WEBHOOK_SECRET"),
         port=_get_int("PORT", 8080),
         log_level=_get("LOG_LEVEL", "INFO").upper(),
+        keepalive_minutos=_get_int("KEEPALIVE_MINUTES", 10),
     )
 
     if config.main_group_id == config.admin_group_id:

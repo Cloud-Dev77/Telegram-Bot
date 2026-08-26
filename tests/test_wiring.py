@@ -217,6 +217,12 @@ class TestProtecaoContraDerrubarProducao(unittest.IsolatedAsyncioTestCase):
         with patch.dict("os.environ", {}, clear=True):
             await app_mod._recusar_se_houver_producao_no_ar(app)
 
+    def test_run_webhook_liga_o_auto_ping(self):
+        codigo = inspect.getsource(app_mod.run_webhook)
+        self.assertIn("_manter_acordado", codigo)
+        self.assertIn("keepalive_minutos > 0", codigo)
+        self.assertIn("ping.cancel()", codigo)
+
     def test_run_polling_usa_a_trava(self):
         codigo = inspect.getsource(app_mod.run_polling)
         self.assertIn("_recusar_se_houver_producao_no_ar", codigo)

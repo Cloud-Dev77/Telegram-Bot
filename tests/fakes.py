@@ -81,6 +81,7 @@ def config_falsa(**extra):
         webhook_secret="",
         port=8080,
         log_level="CRITICAL",
+        keepalive_minutos=0,
     )
     base.update(extra)
     from bot.config import Config

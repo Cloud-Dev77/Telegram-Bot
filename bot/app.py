@@ -13,6 +13,7 @@ Dois modos, escolhidos automaticamente:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 
@@ -301,6 +302,46 @@ def _montar_servidor(application: Application, config: Config) -> Starlette:
     )
 
 
+async def _manter_acordado(config: Config) -> None:
+    """Chama a própria rota /health de tempos em tempos.
+
+    O plano gratuito do Render desliga o serviço após cerca de 15 minutos sem
+    requisições, e religar leva ~50 segundos. Como o Telegram só permite que o
+    bot inicie a conversa privada por poucos minutos após a solicitação, essa
+    demora come uma fatia perigosa dessa janela.
+
+    A chamada sai do próprio serviço, passa pela URL pública e volta — para o
+    Render, é tráfego de entrada como qualquer outro.
+
+    Isto mantém o serviço ligado praticamente o mês inteiro (~730 h de um
+    limite gratuito de 750 h/mês). Cabe para UM serviço; se a mesma conta
+    hospedar outro, ajuste `KEEPALIVE_MINUTES` ou desligue com `0`.
+
+    Um monitor externo (UptimeRobot e afins) continua sendo melhor, porque
+    também avisa quando o serviço cai de verdade. Isto aqui é a rede de
+    segurança que não depende de mais nenhuma conta.
+    """
+    import httpx
+
+    intervalo = config.keepalive_minutos * 60
+    alvo = f"{config.webhook_url}/health"
+    logger.info(
+        "Auto-ping ativo: %s a cada %d min.", alvo, config.keepalive_minutos
+    )
+
+    while True:
+        await asyncio.sleep(intervalo)
+        try:
+            async with httpx.AsyncClient(timeout=30) as cliente:
+                resposta = await cliente.get(alvo)
+            logger.debug("Auto-ping: HTTP %s", resposta.status_code)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # Falhar aqui não afeta o atendimento; só registra e tenta depois.
+            logger.warning("Auto-ping falhou: %s", exc)
+
+
 async def run_webhook(application: Application, config: Config) -> None:
     url = f"{config.webhook_url}{config.webhook_path}"
     logger.info("Iniciando em modo WEBHOOK: %s (porta %d).", url, config.port)
@@ -325,8 +366,19 @@ async def run_webhook(application: Application, config: Config) -> None:
             max_connections=40,
         )
         await application.start()
+
+        ping = None
+        if config.keepalive_minutos > 0:
+            ping = asyncio.create_task(_manter_acordado(config))
+        else:
+            logger.info("Auto-ping desligado (KEEPALIVE_MINUTES=0).")
+
         try:
             await servidor.serve()
         finally:
+            if ping is not None:
+                ping.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await ping
             await application.stop()
             logger.info("Bot encerrado.")
