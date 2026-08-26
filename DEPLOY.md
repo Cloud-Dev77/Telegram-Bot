@@ -171,16 +171,40 @@ atualizações permitidas e se houve erro de entrega.
 ## Passo 6 — Impedir a hibernação
 
 No plano gratuito o Render desliga o serviço após ~15 minutos sem tráfego, e
-a primeira chamada seguinte demora para responder. Como a janela de contato
-do Telegram é de apenas ~5 minutos, esse atraso pode custar um cadastro.
+religar leva cerca de 50 segundos. Como a janela do Telegram para o bot
+iniciar a conversa privada é de poucos minutos, esse atraso come uma fatia
+perigosa dela.
+
+### Já vem resolvido: auto-ping embutido
+
+Em modo webhook o bot chama a própria rota `/health` a cada
+`KEEPALIVE_MINUTES` (padrão **10**). A chamada sai do serviço, passa pela URL
+pública e volta — para o Render, é tráfego de entrada como qualquer outro.
+
+Nada a configurar. No log aparece:
+
+```
+Auto-ping ativo: https://SEU-SERVICO.onrender.com/health a cada 10 min.
+```
+
+Isso mantém o serviço ligado praticamente o mês inteiro: ~730 h de um limite
+gratuito de **750 h/mês**. Cabe para **um** serviço por conta. Se a mesma
+conta hospedar outro, aumente `KEEPALIVE_MINUTES` ou desligue com `0`.
+
+### Ainda vale um monitor externo
+
+O auto-ping mantém o serviço acordado, mas não avisa quando ele cai de
+verdade — um processo morto não pinga a si mesmo. Um monitor externo cobre
+justamente esse caso:
 
 1. Conta gratuita em <https://uptimerobot.com>
 2. **Add New Monitor** → tipo **HTTP(s)**
 3. URL: `https://SEU-SERVICO.onrender.com/health`
 4. Intervalo: **5 minutos**
+5. Cadastre seu e-mail para receber o alerta de queda
 
-O plano gratuito do Render dá 750 horas de execução por mês — suficiente para
-um único serviço ligado o mês inteiro.
+Com o monitor externo ativo, dá para desligar o auto-ping
+(`KEEPALIVE_MINUTES=0`) e economizar horas do plano gratuito.
 
 ---
 

@@ -285,7 +285,7 @@ em hospedagens que hibernam por inatividade.
 > No plano gratuito do Render, `GOOGLE_CREDENTIALS_JSON` deve ser colado em uma
 > linha só. Copie o conteúdo do arquivo inteiro, das chaves `{` até `}`.
 
-### Manter o serviço acordado
+### Manter o serviço acordado (já vem embutido)
 
 O plano gratuito do Render hiberna o serviço após alguns minutos sem tráfego, e
 a primeira requisição depois disso demora para responder. Para evitar isso:
@@ -388,6 +388,7 @@ apague. Colunas extras à direita da O são preservadas.
 | `PORT` | | Porta HTTP. Padrão: `8080` |
 | `TIMEZONE` | | Padrão: `America/Sao_Paulo` |
 | `LOG_LEVEL` | | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `KEEPALIVE_MINUTES` | | Auto-ping em `/health` para não hibernar. `0` desliga. Padrão: `10` |
 
 ¹ Uma das duas. No Render, use `GOOGLE_CREDENTIALS_JSON`.
 
