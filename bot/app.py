@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 import uvicorn
 from starlette.applications import Starlette
@@ -169,6 +170,53 @@ async def _verificar_grupo_admin(application: Application, config: Config) -> No
 # ---------------------------------------------------------------------------
 
 
+class ProducaoNoAr(RuntimeError):
+    """Há um webhook ativo — rodar em polling derrubaria o bot de produção."""
+
+
+async def _recusar_se_houver_producao_no_ar(application: Application) -> None:
+    """Impede que rodar na sua máquina desligue o bot que está no ar.
+
+    Um bot do Telegram só pode estar em UM modo por vez. Ao iniciar o
+    polling, o `python-telegram-bot` chama `deleteWebhook` — então rodar
+    `python main.py` na máquina de quem desenvolve derrubaria calado o bot
+    hospedado, e ninguém perceberia até alguém pedir entrada e nada
+    acontecer.
+
+    Por isso a recusa é o padrão. Para rodar mesmo assim (com o serviço da
+    hospedagem desligado, por exemplo), defina `PERMITIR_POLLING=1`.
+    """
+    if os.getenv("PERMITIR_POLLING", "").strip() == "1":
+        logger.warning(
+            "PERMITIR_POLLING=1: seguindo em polling mesmo com webhook ativo."
+        )
+        return
+
+    try:
+        info = await application.bot.get_webhook_info()
+    except TelegramError as exc:  # sem rede, sem informação — não bloqueia
+        logger.warning("Não consegui verificar o webhook: %s", exc)
+        return
+
+    if not info.url:
+        return
+
+    raise ProducaoNoAr(
+        "Existe um webhook ativo para este bot:\n\n"
+        f"    {info.url}\n\n"
+        "Ou seja, ele já está rodando em produção. Iniciar o modo polling "
+        "aqui apagaria esse webhook e o bot hospedado pararia de atender "
+        "sem dar nenhum sinal.\n\n"
+        "O que fazer:\n"
+        "  • Só diagnosticar? Use `python tools/diagnostico.py`, que não "
+        "mexe no webhook.\n"
+        "  • Testar com um bot separado? Crie outro bot no @BotFather e "
+        "troque o BOT_TOKEN do seu .env.\n"
+        "  • Produção parada de propósito e você quer mesmo assumir o "
+        "controle? Rode com PERMITIR_POLLING=1."
+    )
+
+
 async def run_polling(application: Application) -> None:
     """Consulta o Telegram periodicamente. Não precisa de URL pública.
 
@@ -178,6 +226,7 @@ async def run_polling(application: Application) -> None:
     """
     logger.info("Iniciando em modo POLLING (desenvolvimento).")
     async with application:
+        await _recusar_se_houver_producao_no_ar(application)
         await preparar(application)
         await application.start()
         await application.updater.start_polling(

@@ -8,7 +8,7 @@ os transforma em falha de teste.
 from __future__ import annotations
 
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from telegram.ext import (
     CallbackQueryHandler,
@@ -173,6 +173,53 @@ class TestPreparar(unittest.IsolatedAsyncioTestCase):
         self.bot.set_my_commands.assert_awaited_once()
         comandos = self.bot.set_my_commands.await_args.args[0]
         self.assertEqual([c.command for c in comandos], ["start", "cancelar"])
+
+
+class TestProtecaoContraDerrubarProducao(unittest.IsolatedAsyncioTestCase):
+    """Rodar polling na máquina do desenvolvedor apaga o webhook de produção.
+
+    O python-telegram-bot chama `deleteWebhook` ao iniciar o polling. Sem
+    esta trava, um `python main.py` local derrubaria o bot hospedado em
+    silêncio — ninguém notaria até alguém pedir entrada e nada acontecer.
+    """
+
+    def _app(self, url_webhook):
+        from types import SimpleNamespace
+
+        bot = AsyncMock()
+        bot.get_webhook_info = AsyncMock(
+            return_value=SimpleNamespace(url=url_webhook)
+        )
+        return SimpleNamespace(bot=bot)
+
+    async def test_recusa_quando_ha_webhook_ativo(self):
+        app = self._app("https://x.onrender.com/telegram")
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(app_mod.ProducaoNoAr) as ctx:
+                await app_mod._recusar_se_houver_producao_no_ar(app)
+        self.assertIn("x.onrender.com", str(ctx.exception))
+
+    async def test_segue_quando_nao_ha_webhook(self):
+        app = self._app("")
+        with patch.dict("os.environ", {}, clear=True):
+            await app_mod._recusar_se_houver_producao_no_ar(app)
+
+    async def test_permitir_polling_libera_a_execucao(self):
+        app = self._app("https://x.onrender.com/telegram")
+        with patch.dict("os.environ", {"PERMITIR_POLLING": "1"}, clear=True):
+            await app_mod._recusar_se_houver_producao_no_ar(app)
+
+    async def test_falha_de_rede_nao_bloqueia(self):
+        from telegram.error import NetworkError
+
+        app = self._app("")
+        app.bot.get_webhook_info = AsyncMock(side_effect=NetworkError("sem rede"))
+        with patch.dict("os.environ", {}, clear=True):
+            await app_mod._recusar_se_houver_producao_no_ar(app)
+
+    def test_run_polling_usa_a_trava(self):
+        codigo = inspect.getsource(app_mod.run_polling)
+        self.assertIn("_recusar_se_houver_producao_no_ar", codigo)
 
 
 if __name__ == "__main__":

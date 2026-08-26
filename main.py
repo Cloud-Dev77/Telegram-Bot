@@ -12,7 +12,7 @@ import asyncio
 import logging
 import sys
 
-from bot.app import build_application, run_polling, run_webhook
+from bot.app import ProducaoNoAr, build_application, run_polling, run_webhook
 from bot.config import ConfigError, configurar_logging, load_config
 from bot.sheets import PlanilhaRepo, SheetsError
 from bot.store import Store
@@ -58,6 +58,9 @@ def main() -> int:
     except SheetsError as exc:
         print(f"\n❌ Erro no Google Planilhas\n\n{exc}\n", file=sys.stderr)
         return 3
+    except ProducaoNoAr as exc:
+        print(f"\n🛑 O bot já está no ar\n\n{exc}\n", file=sys.stderr)
+        return 4
     except (KeyboardInterrupt, SystemExit):
         logger.info("Encerrado pelo usuário.")
     return 0
