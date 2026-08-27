@@ -44,10 +44,11 @@ CABECALHO: tuple[str, ...] = (
     "Decidido por",                   # M
     "Etapa",                          # N
     "ID Msg Admin",                   # O
+    "Campo em edição",                # P
 )
 
 NUM_COLUNAS = len(CABECALHO)
-ULTIMA_COLUNA = "O"
+ULTIMA_COLUNA = "P"
 
 # Índices (0-based) usados na leitura de linhas cruas.
 COL_DATA_HORA = 0
@@ -65,6 +66,7 @@ COL_DECIDIDO_EM = 11
 COL_DECIDIDO_POR = 12
 COL_ETAPA = 13
 COL_MSG_ADMIN = 14
+COL_EDITANDO = 15
 
 # Colunas escritas conforme o candidato responde (chave -> letra da coluna).
 COLUNA_POR_CAMPO: dict[str, str] = {
@@ -101,6 +103,9 @@ class Solicitacao:
     decidido_por: str = ""
     etapa: int = 0
     msg_admin_id: int = 0
+    # Índice da pergunta que está sendo corrigida a partir do resumo.
+    # -1 = fluxo normal. Fica na planilha para sobreviver a reinícios.
+    editando: int = -1
 
     # --- estado derivado -----------------------------------------------------
 
@@ -114,6 +119,11 @@ class Solicitacao:
     @property
     def decidida(self) -> bool:
         return self.status in STATUS_FINAIS
+
+    @property
+    def corrigindo(self) -> bool:
+        """True quando a pessoa voltou do resumo para arrumar um campo."""
+        return self.editando >= 0
 
     @property
     def elegivel(self) -> bool:
@@ -150,6 +160,7 @@ class Solicitacao:
             self.decidido_por,
             str(self.etapa),
             str(self.msg_admin_id or ""),
+            str(self.editando) if self.editando >= 0 else "",
         ]
 
     @classmethod
@@ -188,7 +199,26 @@ class Solicitacao:
             decidido_por=celulas[COL_DECIDIDO_POR].strip(),
             etapa=como_int(celulas[COL_ETAPA]),
             msg_admin_id=como_int(celulas[COL_MSG_ADMIN]),
+            editando=(
+                como_int(celulas[COL_EDITANDO])
+                if celulas[COL_EDITANDO].strip()
+                else -1
+            ),
         )
+
+    def campos_resumidos(self) -> list[tuple[str, str]]:
+        """(rótulo, valor) de cada pergunta, na ordem em que foram feitas.
+
+        A ordem tem de bater com `questions.PERGUNTAS`, porque o índice do
+        botão de correção é o índice da pergunta.
+        """
+        return [
+            ("Titular", self.titular),
+            ("Nome", self.nome_completo),
+            ("Município/UF", f"{self.municipio}/{self.uf}"),
+            ("Serventia", self.serventia),
+            ("CNS", self.cns),
+        ]
 
     def resumo_para_candidato(self) -> str:
         """Resumo em HTML mostrado ao candidato antes do envio."""

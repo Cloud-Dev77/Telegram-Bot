@@ -128,7 +128,11 @@ class Store:
         return solicitacao
 
     async def salvar_resposta(
-        self, solicitacao: Solicitacao, valores: dict[str, str], nova_etapa: int
+        self,
+        solicitacao: Solicitacao,
+        valores: dict[str, str],
+        nova_etapa: int,
+        editando: int = -1,
     ) -> None:
         """Grava as respostas validadas e avança a etapa."""
         celulas: dict[str, str] = {}
@@ -140,7 +144,35 @@ class Store:
 
         solicitacao.etapa = nova_etapa
         celulas["N"] = str(nova_etapa)
+
+        if editando != solicitacao.editando:
+            solicitacao.editando = editando
+            celulas["P"] = str(editando) if editando >= 0 else ""
+
         await self._repo.atualizar_celulas(solicitacao.linha, celulas)
+
+    async def iniciar_correcao(self, solicitacao: Solicitacao, indice: int) -> None:
+        """Volta o fluxo para uma pergunta específica, vinda do resumo.
+
+        Guarda na planilha qual pergunta está sendo corrigida, para que um
+        reinício da hospedagem no meio da correção não jogue a pessoa de volta
+        ao questionário inteiro.
+        """
+        solicitacao.etapa = indice
+        solicitacao.editando = indice
+        await self._repo.atualizar_celulas(
+            solicitacao.linha, {"N": str(indice), "P": str(indice)}
+        )
+
+    async def encerrar_correcao(self, solicitacao: Solicitacao) -> None:
+        """Correção concluída: volta direto ao resumo."""
+        from .questions import TOTAL_PERGUNTAS
+
+        solicitacao.etapa = TOTAL_PERGUNTAS
+        solicitacao.editando = -1
+        await self._repo.atualizar_celulas(
+            solicitacao.linha, {"N": str(TOTAL_PERGUNTAS), "P": ""}
+        )
 
     async def marcar_aguardando(
         self, solicitacao: Solicitacao, msg_admin_id: int

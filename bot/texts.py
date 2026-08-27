@@ -78,7 +78,7 @@ RESUMO_CONFIRMACAO = (
 )
 
 BOTAO_CONFIRMAR = "✅ Sim, enviar para análise"
-BOTAO_REFAZER = "🔄 Não, refazer"
+BOTAO_REFAZER = "✏️ Corrigir um dado"
 
 ENVIADO_PARA_ANALISE = (
     "Cadastro enviado para a administração! 📨\n\n"
@@ -86,6 +86,20 @@ ENVIADO_PARA_ANALISE = (
     "eu aviso você aqui mesmo.\n\n"
     "Obrigado pela paciência. 🙏"
 )
+
+ESCOLHER_CORRECAO = (
+    "Sem problema! Qual dado você quer corrigir?\n\n"
+    "<i>Toque no item errado — os outros ficam como estão.</i>"
+)
+
+BOTAO_VOLTAR_RESUMO = "↩️ Voltar, está tudo certo"
+
+CORRIGIR_PERGUNTA = (
+    "Certo. Vamos corrigir apenas este dado.\n\n"
+    "<i>Valor atual: {atual}</i>"
+)
+
+CORRECAO_OK = "✅ Dado atualizado! Confira como ficou:"
 
 REFAZER = "Sem problema! Vamos preencher tudo de novo. 👇"
 

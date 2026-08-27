@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 
 from bot.models import CABECALHO, NUM_COLUNAS, Solicitacao
 
-_COLUNAS = {letra: indice for indice, letra in enumerate("ABCDEFGHIJKLMNO")}
+_COLUNAS = {letra: indice for indice, letra in enumerate("ABCDEFGHIJKLMNOP")}
 
 
 class PlanilhaFalsa:

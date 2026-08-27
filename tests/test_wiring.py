@@ -7,6 +7,7 @@ os transforma em falha de teste.
 
 from __future__ import annotations
 
+import inspect
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -18,12 +19,9 @@ from telegram.ext import (
     MessageHandler,
 )
 
-import inspect
-
 from bot import app as app_mod
 from bot.app import build_application, preparar
-from bot.handlers import ALLOWED_UPDATES
-from bot.handlers import onboarding
+from bot.handlers import ALLOWED_UPDATES, onboarding
 from bot.models import STATUS_EM_ANDAMENTO
 from bot.store import Store
 from tests.fakes import (

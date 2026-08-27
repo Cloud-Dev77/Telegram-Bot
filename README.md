@@ -245,7 +245,7 @@ testar. Peça entrada no grupo com uma segunda conta e acompanhe o fluxo.
 python -m unittest discover -s tests -t .
 ```
 
-109 testes cobrem as validações, o fluxo completo, a retomada após reinício da
+115 testes cobrem as validações, o fluxo completo, a retomada após reinício da
 hospedagem, o clique duplo nos botões administrativos e as solicitações que
 deixam de existir no Telegram. Nenhum deles usa rede.
 
@@ -374,6 +374,7 @@ As colunas espelham o formulário **"Cadastro - Grupo Titulares Telegram"**:
 | M | Decidido por |
 | N | Etapa (controle interno) |
 | O | ID Msg Admin (controle interno) |
+| P | Campo em edição (controle interno) |
 
 Status possíveis: `Em andamento`, `Aguardando aprovação`, `Aprovado`,
 `Recusado`, `Sem contato`.
@@ -383,7 +384,7 @@ chega, sempre na mesma linha. Por isso o bot pode ser reiniciado a qualquer
 momento — inclusive pela hibernação do plano gratuito — sem perder nenhum
 cadastro em andamento.
 
-As colunas **N** e **O** são de controle interno; pode escondê-las, mas não as
+As colunas **N**, **O** e **P** são de controle interno; pode escondê-las, mas não as
 apague. Colunas extras à direita da O são preservadas.
 
 ---
@@ -476,7 +477,7 @@ quem já decidiu e quando.
 ├── tools/
 │   └── diagnostico.py         Verificação da instalação
 │
-└── tests/                    109 testes, sem rede
+└── tests/                    115 testes, sem rede
 ```
 
 ### Comandos do bot
@@ -501,5 +502,18 @@ quem já decidiu e quando.
   como texto, nunca interpretada como fórmula.
 * **Escape de HTML em tudo que vem do usuário:** um nome com `<` não quebra o
   card administrativo.
+* **Pergunta 1 usa teclado de resposta, não botão inline.** O Telegram só
+  deixa o bot escrever para quem já escreveu para ele. Depois de um pedido de
+  entrada existe uma permissão temporária que cobre as primeiras mensagens,
+  mas *tocar num botão inline não conta como escrever* — o canal continua
+  fechado e a pergunta 2 nunca sai. Com teclado de resposta, tocar em "Sim"
+  envia a palavra como mensagem do usuário, o canal abre e o fluxo anda. Os
+  botões inline seguintes (resumo, correção, decisão) são seguros porque a
+  essa altura a pessoa já digitou.
+* **Corrigir um dado não refaz o cadastro.** No resumo, "Corrigir um dado"
+  abre a lista dos 5 campos com os valores atuais; a pessoa arruma só o que
+  errou e volta direto ao resumo. Qual campo está em correção fica na coluna
+  P da planilha, então um reinício da hospedagem no meio disso não joga
+  ninguém de volta ao começo.
 * **Modo webhook em produção:** além de mais rápido, é o que permite ao serviço
   hibernar e acordar sozinho no plano gratuito.

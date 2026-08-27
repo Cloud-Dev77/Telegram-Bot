@@ -18,7 +18,7 @@ from telegram.ext import (
 )
 
 from . import admin, errors, onboarding
-from .common import CB_CATEGORIA, CB_CONFIRMAR, CB_DECISAO
+from .common import CB_CATEGORIA, CB_CONFIRMAR, CB_CORRIGIR, CB_DECISAO
 
 PRIVADO = filters.ChatType.PRIVATE
 
@@ -46,6 +46,9 @@ def registrar(application: Application) -> None:
     )
     application.add_handler(
         CallbackQueryHandler(onboarding.on_confirmacao, pattern=rf"^{CB_CONFIRMAR}:")
+    )
+    application.add_handler(
+        CallbackQueryHandler(onboarding.on_corrigir, pattern=rf"^{CB_CORRIGIR}:")
     )
 
     # --- respostas às perguntas (sempre por último entre as mensagens) ----

@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 from telegram.error import BadRequest
 
 from bot.handlers import admin, onboarding
+from bot.questions import OPCOES_TITULAR
 from bot.models import (
     STATUS_AGUARDANDO,
     STATUS_APROVADO,
@@ -34,6 +35,15 @@ from tests.fakes import (
 USER_ID = 555
 
 
+def query_teclado_texto(bot) -> list[str]:
+    """Rótulos dos botões inline da última mensagem enviada."""
+    for chamada in reversed(bot.send_message.await_args_list):
+        teclado = chamada.kwargs.get("reply_markup")
+        if teclado is not None and getattr(teclado, "inline_keyboard", None):
+            return [b.text for linha in teclado.inline_keyboard for b in linha]
+    return []
+
+
 class BaseFluxo(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.planilha = PlanilhaFalsa()
@@ -52,8 +62,24 @@ class BaseFluxo(unittest.IsolatedAsyncioTestCase):
         )
 
     async def escolher_categoria(self, indice: int = 0):
-        query = query_falsa(f"cat:{indice}", chat_id=USER_ID)
-        await onboarding.on_categoria(
+        """Pergunta 1 é respondida por TEXTO, não por botão inline.
+
+        O teclado de resposta faz o Telegram enviar a palavra escolhida como
+        mensagem do usuário — é justamente isso que abre o canal privado e
+        destrava o envio da pergunta 2.
+        """
+        await self.responder(OPCOES_TITULAR[indice])
+
+    async def abrir_menu_correcao(self):
+        query = query_falsa("conf:nao", chat_id=USER_ID)
+        await onboarding.on_confirmacao(
+            update_falso(query, self.usuario, USER_ID), self.context
+        )
+        return query
+
+    async def escolher_correcao(self, alvo):
+        query = query_falsa(f"fix:{alvo}", chat_id=USER_ID)
+        await onboarding.on_corrigir(
             update_falso(query, self.usuario, USER_ID), self.context
         )
         return query
@@ -101,17 +127,23 @@ class TestColetaDeDados(BaseFluxo):
         self.assertEqual(self.planilha.celula(2, "G"), "Campinas")
         self.assertEqual(self.planilha.celula(2, "H"), "SP")
 
-    async def test_botao_de_categoria_antigo_nao_sobrescreve(self):
-        """Clicar de novo no botão da pergunta 1 não pode voltar o fluxo."""
-        await self.criar_solicitacao()
-        await self.escolher_categoria(0)
-        await self.responder("Maria Aparecida de Souza")
+    async def test_botao_inline_antigo_orienta_a_digitar(self):
+        """Quem ficou com o botão inline da versão anterior na tela.
 
-        query = await self.escolher_categoria(1)  # clique tardio em outra opção
-        solicitacao = self.store.obter(USER_ID)
-        self.assertEqual(solicitacao.etapa, 2)
-        self.assertEqual(solicitacao.titular, "Sim")
+        O popup do `answer` funciona mesmo com o canal privado fechado — é o
+        único caminho que sobra para orientar essa pessoa.
+        """
+        await self.criar_solicitacao()
+        query = query_falsa("cat:0", chat_id=USER_ID)
+        await onboarding.on_categoria(
+            update_falso(query, self.usuario, USER_ID), self.context
+        )
         query.answer.assert_awaited()
+        alerta = query.answer.await_args.args[0]
+        self.assertIn("Sim", alerta)
+        self.assertTrue(query.answer.await_args.kwargs.get("show_alert"))
+        # Nada foi gravado: a resposta válida vem pelo texto.
+        self.assertEqual(self.store.obter(USER_ID).etapa, 0)
 
 
 class TestReinicioDaHospedagem(BaseFluxo):
@@ -148,19 +180,17 @@ class TestReinicioDaHospedagem(BaseFluxo):
 
 
 class TestReinicioDoCadastro(BaseFluxo):
-    async def test_refazer_reaproveita_a_mesma_linha(self):
+    async def test_corrigir_nao_apaga_as_outras_respostas(self):
+        """O ponto do relato do cliente: errar 1 dado não pode zerar os 5."""
         await self.preencher_tudo()
         linha_antes = self.store.obter(USER_ID).linha
 
-        query = query_falsa("conf:nao", chat_id=USER_ID)
-        await onboarding.on_confirmacao(
-            update_falso(query, self.usuario, USER_ID), self.context
-        )
+        await self.abrir_menu_correcao()
 
         solicitacao = self.store.obter(USER_ID)
         self.assertEqual(solicitacao.linha, linha_antes)
-        self.assertEqual(solicitacao.etapa, 0)
-        self.assertEqual(solicitacao.nome_completo, "")
+        self.assertEqual(solicitacao.nome_completo, "Maria Aparecida de Souza")
+        self.assertEqual(solicitacao.cns, "123456-7")
         self.assertEqual(len(self.planilha.linhas), 2)  # cabeçalho + 1 linha
 
     async def test_nova_solicitacao_apos_recusa_cria_linha_nova(self):
@@ -171,6 +201,98 @@ class TestReinicioDoCadastro(BaseFluxo):
         nova = await self.criar_solicitacao()
         self.assertEqual(nova.linha, 3)
         self.assertEqual(self.planilha.celula(2, "K"), STATUS_RECUSADO)
+
+
+class TestCorrecaoDeUmCampo(BaseFluxo):
+    """Corrigir um dado no resumo, sem refazer o questionário inteiro.
+
+    Relato do cliente: ao apontar que o 3º dado estava errado, o bot mandava
+    preencher tudo de novo desde a primeira pergunta.
+    """
+
+    async def test_menu_lista_os_cinco_campos_com_os_valores(self):
+        await self.preencher_tudo()
+        await self.abrir_menu_correcao()
+        botoes = query_teclado_texto(self.context.bot)
+        self.assertEqual(len(botoes), 6)  # 5 campos + voltar
+        self.assertIn("Maria Aparecida", " ".join(botoes))
+        self.assertIn("Campinas/SP", " ".join(botoes))
+
+    async def test_corrigir_o_terceiro_campo_volta_direto_ao_resumo(self):
+        await self.preencher_tudo()
+        await self.abrir_menu_correcao()
+        await self.escolher_correcao(2)  # Município/UF
+
+        solicitacao = self.store.obter(USER_ID)
+        self.assertTrue(solicitacao.corrigindo)
+        self.assertEqual(solicitacao.etapa, 2)
+
+        self.context.bot.send_message.reset_mock()
+        await self.responder("Santos/SP")
+
+        solicitacao = self.store.obter(USER_ID)
+        self.assertEqual(solicitacao.municipio, "Santos")
+        self.assertEqual(solicitacao.uf, "SP")
+        self.assertFalse(solicitacao.corrigindo)
+        self.assertTrue(solicitacao.concluida)
+
+        enviadas = mensagens_para(self.context.bot, USER_ID)
+        self.assertTrue(any("atualizado" in m for m in enviadas))
+        self.assertTrue(any("Confira os dados" in m for m in enviadas))
+        # E NÃO pode ter voltado a perguntar a 4
+        self.assertFalse(any("Pergunta 4 de 5" in m for m in enviadas))
+
+    async def test_os_outros_campos_ficam_intactos(self):
+        await self.preencher_tudo()
+        await self.abrir_menu_correcao()
+        await self.escolher_correcao(2)
+        await self.responder("Santos/SP")
+
+        solicitacao = self.store.obter(USER_ID)
+        self.assertEqual(solicitacao.titular, "Sim")
+        self.assertEqual(solicitacao.nome_completo, "Maria Aparecida de Souza")
+        self.assertEqual(solicitacao.serventia, "1º Cartório de Notas")
+        self.assertEqual(solicitacao.cns, "123456-7")
+        self.assertEqual(self.planilha.celula(2, "G"), "Santos")
+
+    async def test_resposta_invalida_durante_a_correcao_repete_a_pergunta(self):
+        await self.preencher_tudo()
+        await self.abrir_menu_correcao()
+        await self.escolher_correcao(1)  # nome
+        self.context.bot.send_message.reset_mock()
+
+        await self.responder("Ana")  # sem sobrenome
+
+        solicitacao = self.store.obter(USER_ID)
+        self.assertTrue(solicitacao.corrigindo)  # continua em modo correção
+        self.assertEqual(solicitacao.nome_completo, "Maria Aparecida de Souza")
+        enviadas = mensagens_para(self.context.bot, USER_ID)
+        self.assertTrue(any("⚠️" in m for m in enviadas))
+
+    async def test_voltar_sem_corrigir_devolve_o_resumo(self):
+        await self.preencher_tudo()
+        await self.abrir_menu_correcao()
+        self.context.bot.send_message.reset_mock()
+        await self.escolher_correcao("volta")
+
+        self.assertFalse(self.store.obter(USER_ID).corrigindo)
+        enviadas = mensagens_para(self.context.bot, USER_ID)
+        self.assertTrue(any("Confira os dados" in m for m in enviadas))
+
+    async def test_correcao_sobrevive_a_reinicio_da_hospedagem(self):
+        """O estado da correção fica na planilha, não só na memória."""
+        await self.preencher_tudo()
+        await self.abrir_menu_correcao()
+        await self.escolher_correcao(2)
+
+        planilha2 = self.planilha.clonar()
+        store2 = Store(planilha2)
+        await store2.carregar()
+
+        recuperada = store2.obter(USER_ID)
+        self.assertTrue(recuperada.corrigindo)
+        self.assertEqual(recuperada.editando, 2)
+        self.assertEqual(recuperada.etapa, 2)
 
 
 class TestCardAdministrativo(BaseFluxo):

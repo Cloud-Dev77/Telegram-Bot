@@ -40,6 +40,7 @@ from .common import (
     get_store,
     nome_do_grupo,
     remover_botoes,
+    teclado_correcao,
     teclado_decisao,
 )
 
@@ -230,6 +231,17 @@ async def on_resposta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await avancar(context.bot, usuario.id, solicitacao)
             return
 
+        if solicitacao.corrigindo:
+            # Veio do resumo para arrumar UM dado: grava e volta ao resumo,
+            # sem refazer as perguntas seguintes.
+            await store.salvar_resposta(
+                solicitacao, resultado.valores, solicitacao.etapa + 1
+            )
+            await store.encerrar_correcao(solicitacao)
+            await enviar_html(context.bot, usuario.id, texts.CORRECAO_OK)
+            await enviar_resumo(context.bot, usuario.id, solicitacao)
+            return
+
         await store.salvar_resposta(
             solicitacao, resultado.valores, solicitacao.etapa + 1
         )
@@ -250,43 +262,22 @@ async def on_nao_texto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def on_categoria(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Clique em um dos botões da pergunta 1 (titular de serventia?)."""
+    """Compatibilidade: botão inline antigo da pergunta 1.
+
+    A pergunta 1 passou a usar teclado de resposta, porque tocar num botão
+    inline não abre o canal privado e a pergunta seguinte nunca era enviada.
+    Este handler existe só para quem ficou com o botão antigo na tela: o
+    popup do `answer` sempre funciona, mesmo com o canal fechado, e orienta
+    a pessoa a digitar a resposta — o que abre o canal e destrava o fluxo.
+    """
     query = update.callback_query
-    usuario = update.effective_user
-    store = get_store(context)
-
-    try:
-        indice = int(query.data.split(":", 1)[1])
-        opcao = OPCOES_TITULAR[indice]
-    except (IndexError, ValueError):
-        await query.answer("Opção inválida.", show_alert=True)
-        return
-
-    async with store.lock(usuario.id):
-        solicitacao = await _solicitacao_ativa(update, context)
-        if solicitacao is None:
-            await query.answer()
-            await remover_botoes(query)
-            return
-
-        if solicitacao.etapa != 0:
-            # Botão antigo, de uma etapa já superada.
-            await query.answer("Esta pergunta já foi respondida.")
-            await remover_botoes(query)
-            await avancar(context.bot, usuario.id, solicitacao)
-            return
-
-        await query.answer(opcao)
-        try:
-            await query.edit_message_text(
-                text=f"{PERGUNTAS[0].pergunta}\n\n✅ <b>{h(opcao)}</b>",
-                parse_mode="HTML",
-            )
-        except BadRequest:
-            pass
-
-        await store.salvar_resposta(solicitacao, {"titular": opcao}, 1)
-        await avancar(context.bot, usuario.id, solicitacao)
+    opcoes = " ou ".join(OPCOES_TITULAR)
+    await query.answer(
+        f"Este botão é de uma versão anterior. Digite {opcoes} na conversa "
+        "para continuar.",
+        show_alert=True,
+    )
+    await remover_botoes(query)
 
 
 # ---------------------------------------------------------------------------
@@ -317,16 +308,57 @@ async def on_confirmacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await remover_botoes(query)
 
         if escolha == "nao":
-            await store.criar_ou_reiniciar(
-                usuario.id, usuario.username or "", nome_exibicao(usuario)
+            await enviar_html(
+                context.bot,
+                usuario.id,
+                texts.ESCOLHER_CORRECAO,
+                reply_markup=teclado_correcao(solicitacao),
             )
-            nova = store.obter(usuario.id)
-            await enviar_html(context.bot, usuario.id, texts.REFAZER)
-            await avancar(context.bot, usuario.id, nova)
             return
 
         await _publicar_card(context, solicitacao)
         await enviar_html(context.bot, usuario.id, texts.ENVIADO_PARA_ANALISE)
+
+
+async def on_corrigir(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Escolha de qual dado corrigir, a partir do resumo."""
+    query = update.callback_query
+    usuario = update.effective_user
+    store = get_store(context)
+    escolha = query.data.split(":", 1)[1]
+
+    async with store.lock(usuario.id):
+        solicitacao = await _solicitacao_ativa(update, context)
+        if solicitacao is None:
+            await query.answer()
+            await remover_botoes(query)
+            return
+
+        await query.answer()
+        await remover_botoes(query)
+
+        if escolha == "volta":
+            await enviar_resumo(context.bot, usuario.id, solicitacao)
+            return
+
+        try:
+            indice = int(escolha)
+            pergunta = PERGUNTAS[indice]
+        except (ValueError, IndexError):
+            await enviar_resumo(context.bot, usuario.id, solicitacao)
+            return
+
+        _, atual = solicitacao.campos_resumidos()[indice]
+        await store.iniciar_correcao(solicitacao, indice)
+        await enviar_html(
+            context.bot,
+            usuario.id,
+            texts.CORRIGIR_PERGUNTA.format(atual=h(atual) or "(vazio)"),
+        )
+        await avancar(context.bot, usuario.id, solicitacao)
+        logger.info(
+            "Usuário %s corrigindo o campo %d (%s).", usuario.id, indice, pergunta.chave
+        )
 
 
 async def _publicar_card(
