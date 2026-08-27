@@ -82,6 +82,7 @@ def config_falsa(**extra):
         port=8080,
         log_level="CRITICAL",
         keepalive_minutos=0,
+        anunciar_entrada=True,
     )
     base.update(extra)
     from bot.config import Config

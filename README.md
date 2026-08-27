@@ -56,6 +56,8 @@ os administradores aprovarem ou recusarem com um toque.
           ▼                       ▼
    Entra no grupo          Solicitação recusada
    + aviso no privado      + aviso no privado
+   + boas-vindas no
+     grupo principal
           └───────────┬───────────┘
                       ▼
         Planilha atualizada com o status,
@@ -245,7 +247,7 @@ testar. Peça entrada no grupo com uma segunda conta e acompanhe o fluxo.
 python -m unittest discover -s tests -t .
 ```
 
-115 testes cobrem as validações, o fluxo completo, a retomada após reinício da
+121 testes cobrem as validações, o fluxo completo, a retomada após reinício da
 hospedagem, o clique duplo nos botões administrativos e as solicitações que
 deixam de existir no Telegram. Nenhum deles usa rede.
 
@@ -406,6 +408,7 @@ apague. Colunas extras à direita da O são preservadas.
 | `TIMEZONE` | | Padrão: `America/Sao_Paulo` |
 | `LOG_LEVEL` | | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `KEEPALIVE_MINUTES` | | Auto-ping em `/health` para não hibernar. `0` desliga. Padrão: `10` |
+| `ANUNCIAR_ENTRADA` | | Boas-vindas no grupo principal ao aprovar. `0` desliga. Padrão: `1` |
 
 ¹ Uma das duas. No Render, use `GOOGLE_CREDENTIALS_JSON`.
 
@@ -477,7 +480,7 @@ quem já decidiu e quando.
 ├── tools/
 │   └── diagnostico.py         Verificação da instalação
 │
-└── tests/                    115 testes, sem rede
+└── tests/                    121 testes, sem rede
 ```
 
 ### Comandos do bot
@@ -515,5 +518,10 @@ quem já decidiu e quando.
   errou e volta direto ao resumo. Qual campo está em correção fica na coluna
   P da planilha, então um reinício da hospedagem no meio disso não joga
   ninguém de volta ao começo.
+* **O anúncio no grupo principal só sai se a entrada foi confirmada.** Se a
+  solicitação já tinha expirado no Telegram, a pessoa pode nem estar no grupo
+  — dar boas-vindas a quem não entrou seria pior do que não avisar. E ele leva
+  apenas nome, serventia e município/UF: CNS, Telegram ID e @usuário são dados
+  de verificação e ficam restritos ao grupo dos administradores.
 * **Modo webhook em produção:** além de mais rápido, é o que permite ao serviço
   hibernar e acordar sozinho no plano gratuito.

@@ -480,6 +480,88 @@ class TestDecisao(BaseFluxo):
         self.assertTrue(any("aprovada" in m.lower() for m in avisos))
 
 
+class TestAnuncioNoGrupo(BaseFluxo):
+    """Após aprovar: boas-vindas no privado E aviso no grupo principal."""
+
+    async def enviar_e_aprovar(self, **cfg):
+        if cfg:
+            self.config = config_falsa(**cfg)
+            self.context = contexto_falso(self.config, self.store, self.planilha)
+        await self.preencher_tudo()
+        await onboarding.on_confirmacao(
+            update_falso(query_falsa("conf:sim", chat_id=USER_ID), self.usuario, USER_ID),
+            self.context,
+        )
+        self.context.bot.send_message.reset_mock()
+        query = query_falsa(f"adm:ap:{USER_ID}", chat_id=self.config.admin_group_id)
+        await admin.on_decisao(
+            update_falso(query, usuario_falso(777, "ana", "Ana"), self.config.admin_group_id),
+            self.context,
+        )
+
+    async def test_anuncia_no_grupo_principal(self):
+        await self.enviar_e_aprovar()
+        avisos = mensagens_para(self.context.bot, self.config.main_group_id)
+        self.assertEqual(len(avisos), 1)
+        aviso = avisos[0]
+        self.assertIn("Maria Aparecida de Souza", aviso)
+        self.assertIn("1º Cartório de Notas", aviso)
+        self.assertIn("Campinas/SP", aviso)
+
+    async def test_anuncio_nao_expoe_dados_de_verificacao(self):
+        """CNS, Telegram ID e @usuário são só do grupo dos administradores."""
+        await self.enviar_e_aprovar()
+        aviso = mensagens_para(self.context.bot, self.config.main_group_id)[0]
+        self.assertNotIn("123456-7", aviso)
+        self.assertNotIn("fulano", aviso)
+        self.assertNotIn("Titular", aviso)
+
+    async def test_avisa_o_usuario_no_privado(self):
+        await self.enviar_e_aprovar()
+        privadas = mensagens_para(self.context.bot, USER_ID)
+        self.assertTrue(any("aprovada" in m.lower() for m in privadas))
+
+    async def test_recusa_nao_anuncia(self):
+        await self.preencher_tudo()
+        await onboarding.on_confirmacao(
+            update_falso(query_falsa("conf:sim", chat_id=USER_ID), self.usuario, USER_ID),
+            self.context,
+        )
+        self.context.bot.send_message.reset_mock()
+        query = query_falsa(f"adm:rc:{USER_ID}", chat_id=self.config.admin_group_id)
+        await admin.on_decisao(
+            update_falso(query, usuario_falso(777, "ana", "Ana"), self.config.admin_group_id),
+            self.context,
+        )
+        self.assertEqual(mensagens_para(self.context.bot, self.config.main_group_id), [])
+
+    async def test_pode_ser_desligado(self):
+        await self.enviar_e_aprovar(anunciar_entrada=False)
+        self.assertEqual(mensagens_para(self.context.bot, self.config.main_group_id), [])
+        # O aviso no privado continua valendo.
+        privadas = mensagens_para(self.context.bot, USER_ID)
+        self.assertTrue(any("aprovada" in m.lower() for m in privadas))
+
+    async def test_solicitacao_expirada_nao_anuncia(self):
+        """Se o Telegram recusou a entrada, ninguém entrou — não dar boas-vindas."""
+        await self.preencher_tudo()
+        await onboarding.on_confirmacao(
+            update_falso(query_falsa("conf:sim", chat_id=USER_ID), self.usuario, USER_ID),
+            self.context,
+        )
+        self.context.bot.approve_chat_join_request = AsyncMock(
+            side_effect=BadRequest("HIDE_REQUESTER_MISSING")
+        )
+        self.context.bot.send_message.reset_mock()
+        query = query_falsa(f"adm:ap:{USER_ID}", chat_id=self.config.admin_group_id)
+        await admin.on_decisao(
+            update_falso(query, usuario_falso(777, "ana", "Ana"), self.config.admin_group_id),
+            self.context,
+        )
+        self.assertEqual(mensagens_para(self.context.bot, self.config.main_group_id), [])
+        self.assertEqual(self.store.obter(USER_ID).status, STATUS_APROVADO)
+
+
 class TestRespostasForaDeHora(BaseFluxo):
     async def test_texto_sem_solicitacao_orienta_o_usuario(self):
         await self.responder("oi")

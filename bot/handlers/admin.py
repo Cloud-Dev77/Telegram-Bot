@@ -100,11 +100,16 @@ async def on_decisao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         # A partir daqui a decisão é desta pessoa. Como a trava só é liberada
         # no fim, um segundo clique cai no ramo `decidida` acima.
         aviso_extra = ""
+        # Só anuncia no grupo quando o Telegram confirmou a entrada. Se a
+        # solicitação tiver expirado, a pessoa pode nem estar no grupo — dar
+        # boas-vindas a quem não entrou seria pior do que não avisar.
+        entrou_de_fato = False
         try:
             if aprovar:
                 await context.bot.approve_chat_join_request(
                     chat_id=config.main_group_id, user_id=user_id
                 )
+                entrou_de_fato = True
             else:
                 await context.bot.decline_chat_join_request(
                     chat_id=config.main_group_id, user_id=user_id
@@ -147,6 +152,10 @@ async def on_decisao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not avisado:
         aviso_extra += texts.AVISO_DM_BLOQUEADA
 
+    if entrou_de_fato and config.anunciar_entrada:
+        if not await _anunciar_no_grupo(context, solicitacao):
+            aviso_extra += texts.AVISO_ANUNCIO_FALHOU
+
     modelo = (
         texts.CARD_DECIDIDO_APROVADO if aprovar else texts.CARD_DECIDIDO_RECUSADO
     )
@@ -155,6 +164,42 @@ async def on_decisao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         modelo.format(admin=h(nome_admin), data_hora=h(solicitacao.decidido_em))
         + aviso_extra,
     )
+
+
+async def _anunciar_no_grupo(
+    context: ContextTypes.DEFAULT_TYPE, solicitacao: Solicitacao
+) -> bool:
+    """Publica as boas-vindas no grupo principal. Devolve False se falhar.
+
+    Só vão nome, serventia e município/UF. CNS, Telegram ID e @usuário ficam
+    de fora: são dados de verificação, e o grupo principal é aberto a todos
+    os membros — quem precisa deles é o grupo dos administradores.
+    """
+    config = get_config(context)
+
+    # O nome vira link para o perfil; o texto exibido continua só o nome.
+    nome_link = (
+        f'<a href="tg://user?id={solicitacao.user_id}">'
+        f"{h(solicitacao.nome_completo)}</a>"
+    )
+    try:
+        await enviar_html(
+            context.bot,
+            config.main_group_id,
+            texts.ANUNCIO_GRUPO.format(
+                nome_link=nome_link,
+                serventia=h(solicitacao.serventia),
+                municipio=h(solicitacao.municipio),
+                uf=h(solicitacao.uf),
+            ),
+        )
+        logger.info(
+            "Boas-vindas de %s publicadas no grupo principal.", solicitacao.user_id
+        )
+        return True
+    except TelegramError as exc:
+        logger.error("Falha ao anunciar no grupo principal: %s", exc)
+        return False
 
 
 async def _avisar_candidato(

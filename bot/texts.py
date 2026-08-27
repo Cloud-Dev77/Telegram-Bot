@@ -163,6 +163,31 @@ ALERTA_NAO_ELEGIVEL = (
 BOTAO_APROVAR = "✅ Aprovar"
 BOTAO_RECUSAR = "❌ Recusar"
 
+# ---------------------------------------------------------------------------
+# Anúncio de boas-vindas no grupo principal (após aprovação)
+# ---------------------------------------------------------------------------
+
+# Enviado ao GRUPO PRINCIPAL quando uma entrada é aprovada.
+#
+# Contém apenas nome, serventia e município/UF — de propósito. CNS, Telegram
+# ID e @usuário NÃO entram aqui: o card com os dados completos fica restrito
+# ao grupo dos administradores.
+#
+# O nome vira link para o perfil da pessoa; o texto exibido continua sendo só
+# o nome. Para desligar o anúncio, use ANUNCIAR_ENTRADA=0.
+ANUNCIO_GRUPO = (
+    "🎉 <b>Novo membro aprovado!</b>\n\n"
+    "👤 <b>{nome_link}</b>\n"
+    "🏛 {serventia}\n"
+    "📍 {municipio}/{uf}\n\n"
+    "Seja bem-vindo(a) ao grupo! 👋"
+)
+
+# Acrescentado ao card quando o anúncio no grupo principal falha.
+AVISO_ANUNCIO_FALHOU = (
+    "\n\n⚠️ Não consegui publicar o aviso de boas-vindas no grupo principal."
+)
+
 # Acrescentado ao card depois que alguém decide.
 CARD_DECIDIDO_APROVADO = "\n\n✅ <b>APROVADO</b> por {admin} em {data_hora}"
 CARD_DECIDIDO_RECUSADO = "\n\n❌ <b>RECUSADO</b> por {admin} em {data_hora}"

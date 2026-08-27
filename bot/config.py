@@ -66,6 +66,14 @@ def _get_int(name: str, default: int) -> int:
         return default
 
 
+def _get_bool(name: str, default: bool) -> bool:
+    """Liga/desliga por variável de ambiente. Aceita 1/0, true/false, sim/nao."""
+    bruto = _get(name).lower()
+    if not bruto:
+        return default
+    return bruto in {"1", "true", "sim", "yes", "on"}
+
+
 def _require(name: str, dica: str = "") -> str:
     valor = _get(name)
     if not valor:
@@ -114,6 +122,7 @@ class Config:
     port: int
     log_level: str
     keepalive_minutos: int
+    anunciar_entrada: bool
 
     @property
     def modo_webhook(self) -> bool:
@@ -204,6 +213,7 @@ def load_config() -> Config:
         port=_get_int("PORT", 8080),
         log_level=_get("LOG_LEVEL", "INFO").upper(),
         keepalive_minutos=_get_int("KEEPALIVE_MINUTES", 10),
+        anunciar_entrada=_get_bool("ANUNCIAR_ENTRADA", True),
     )
 
     if config.main_group_id == config.admin_group_id:
