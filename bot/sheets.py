@@ -12,6 +12,7 @@ começando com "=" seja gravada como texto e nunca interpretada como fórmula.
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import re
 from typing import Any
@@ -151,11 +152,25 @@ class PlanilhaRepo:
     # -- utilidades -----------------------------------------------------------
 
     async def _com_retry(self, funcao, *args, **kwargs):
-        """Executa uma chamada síncrona do gspread com repetição em falhas temporárias."""
+        """Executa uma chamada síncrona do gspread, repetindo em falhas temporárias.
+
+        Cada tentativa recebe uma CÓPIA dos argumentos, e isso não é zelo
+        excessivo: `Worksheet.batch_update` do gspread altera os dicionários
+        recebidos no lugar, prefixando cada intervalo com o nome da aba
+        (`G57` -> `'Minha Aba'!G57`). Reenviar a mesma lista numa segunda
+        tentativa faria o gspread prefixar de novo, gerando
+        `'Minha Aba'!'Minha Aba'!G57` — que o Google recusa com 400.
+
+        O sintoma era traiçoeiro: só aparecia quando o Google devolvia um erro
+        temporário e o retry entrava em ação, e o 400 seguinte já não é
+        temporário, então a resposta daquele candidato se perdia.
+        """
         ultimo_erro: Exception | None = None
         for tentativa in range(1, MAX_TENTATIVAS + 1):
             try:
-                return await asyncio.to_thread(funcao, *args, **kwargs)
+                return await asyncio.to_thread(
+                    funcao, *copy.deepcopy(args), **copy.deepcopy(kwargs)
+                )
             except gspread.exceptions.APIError as exc:
                 codigo = getattr(exc.response, "status_code", None)
                 if codigo not in CODIGOS_TEMPORARIOS or tentativa == MAX_TENTATIVAS:
